@@ -139,7 +139,7 @@ Parsing by type:
 | Lupa Tipo de Baixa | `#tipoBaixaCPG img[src*="botProcurar.png"]:first-of-type` |
 | Botão Visualizar | `input[value="Visualizar"]` → nova aba |
 
-`select_tipo_baixa()` clicks the Tipo de Baixa lupa, waits for the `spjGenericSearch.do` overlay iframe, and selects **both** "Baixa" and "Antecipação" checkboxes before confirming. Both types must be selected to capture all paid entries.
+`select_tipo_baixa()` clicks the Tipo de Baixa lupa, waits for the `spjGenericSearch.do` overlay iframe, and selects **both** "Pagamento" and "Adiantamento" checkboxes before confirming. Both types must be selected to capture all paid entries.
 
 ---
 
@@ -216,17 +216,18 @@ page.wait_for_url(
 )
 ```
 
-The post-login URL is `https://escolengenharia.sienge.com.br/sienge/index.jsp` (not `index.html`). Do NOT poll `page.url` in a loop or scan `page.context.pages` — the redirect happens in the original tab.
+The post-login URL is `https://escolengenharia.sienge.com.br/sienge/8/index.html` (the `/8/` segment may change with SIENGE versions; do not hardcode it). Do NOT poll `page.url` in a loop or scan `page.context.pages` — the redirect happens in the original tab.
 
 `login_sienge()` returns `page` so the caller can do `page = login_sienge(page, login, senha)`.
 
 ### Detecção do iFramePage
 
-The iframe for the Contas Pagas form loads asynchronously after menu navigation. Use a polling loop (up to 30s) checking multiple identifiers, not a fixed sleep:
+Menu navigation lands the SPA at `#/common/page/NNNN` hash routes; the JSP form then loads asynchronously as a child iframe. Poll up to **60 s** (120 × 0.5 s). Always **exclude the main SPA frame** from the search — its JavaScript bundles contain URL patterns like `filterContaPagas` as strings, causing false positives.
 
 ```python
+main_url = page.url
 frame = None
-for _ in range(60):
+for _ in range(120):
     frame = page.frame(name='iFramePage')
     if not frame:
         frame = page.frame(url='*filterContaPagas*')
@@ -235,12 +236,29 @@ for _ in range(60):
             if f.is_detached(): continue
             try:
                 u = f.url or ''
+                if u == main_url or u.startswith(main_url.split('#')[0] + '#'):
+                    continue          # skip main SPA frame
                 if any(k in u for k in ('ContaPagas', 'filterContaPagas', 'CPG')):
+                    frame = f; break
+            except Exception: pass
+    # last resort: look for Contas Pagas form elements in non-SPA frames
+    if not frame:
+        for f in page.frames:
+            if f.is_detached(): continue
+            try:
+                u = f.url or ''
+                if u == main_url or u.startswith(main_url.split('#')[0] + '#'):
+                    continue
+                if (f.query_selector('[name="entity.dtPagtoInicio"]') or
+                        f.query_selector('#tipoBaixaCPG') or
+                        f.query_selector('[name="entity.empresa.cdEmpresaView"]')):
                     frame = f; break
             except Exception: pass
     if frame: break
     time.sleep(0.5)
 ```
+
+When the frame is still not found, print `page.frames` URLs before raising to aid debugging.
 
 For the Cadastro de Títulos iframe (in `sienge_anexar.py`), detect by body content:
 ```python
