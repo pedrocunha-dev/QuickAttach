@@ -23,7 +23,7 @@ OUTPUT_JSON = (BASE_DIR / 'RELATORIO_CONTAS_PAGAS' / f'RELATORIO_CONTAS_{DATA_PA
 # ---------------------------------------------------------------------------
 
 def _parse_valor(s):
-    """'1.458,86T' → 1458.86"""
+    """'1.458,86T' -> 1458.86"""
     return float(s.strip().rstrip('T').replace('.', '').replace(',', '.'))
 
 
@@ -105,7 +105,7 @@ def _name_score(nome_comp, credor_sienge):
 
 
 def match(lancamentos, comprovantes):
-    """Match comprovantes → lançamentos by valor líquido, with positional
+    """Match comprovantes -> lançamentos by valor líquido, with positional
     matching when multiple files share the same (valor, nome_base).
 
     Files with suffix _XDE Y are grouped and matched positionally against the
@@ -125,7 +125,7 @@ def match(lancamentos, comprovantes):
     for key in groups:
         groups[key].sort(key=lambda c: c['idx'])
 
-    matched    = {}   # filename → [lançamento dict]
+    matched    = {}   # filename -> [lançamento dict]
     unmatched_c = []
 
     for (valor, nome_base), group in groups.items():
@@ -137,7 +137,7 @@ def match(lancamentos, comprovantes):
             unmatched_c.extend(group)
 
         elif n_comp == n_sien:
-            # Counts match: positional assignment (1st file → 1st lançamento…)
+            # Counts match: positional assignment (1st file -> 1st lançamento…)
             for c, l in zip(group, candidates):
                 matched[c['filename']] = [l]
 
@@ -184,7 +184,7 @@ def print_report(matched, unmatched_c, unmatched_l):
     for fname, cands in sorted(single.items()):
         l = cands[0]
         print(f"  {fname}")
-        print(f"    → {l['lancamento']} | {l['credor']} | {fmt_valor(l['liquido'])}")
+        print(f"    -> {l['lancamento']} | {l['credor']} | {fmt_valor(l['liquido'])}")
 
     if multi:
         print(f"\n{'='*70}")
@@ -193,7 +193,7 @@ def print_report(matched, unmatched_c, unmatched_l):
         for fname, cands in multi.items():
             print(f"  {fname} | {fmt_valor(cands[0]['liquido'])}")
             for l in cands:
-                print(f"    → {l['lancamento']} | {l['credor']} | {l['documento']}")
+                print(f"    -> {l['lancamento']} | {l['credor']} | {l['documento']}")
 
     if unmatched_c:
         print(f"\n{'='*70}")
@@ -211,7 +211,7 @@ def print_report(matched, unmatched_c, unmatched_l):
 
     print(f"\n{'='*70}")
     total_pairs = sum(len(c) for c in matched.values())
-    print(f"  Comprovantes: {len(matched)}  |  Pares (comprovante→lançamento): {total_pairs}  |  "
+    print(f"  Comprovantes: {len(matched)}  |  Pares (comprovante->lançamento): {total_pairs}  |  "
           f"Sem match: {len(unmatched_c)}")
     print('='*70)
 

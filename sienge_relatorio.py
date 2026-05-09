@@ -51,31 +51,29 @@ def login_sienge(page, login, senha):
         except: pass
 
     print('[2] Aguardando login/MFA (complete no browser se solicitado)...')
-    mfa_msg_shown = False
-    i = 0
-    while True:
-        time.sleep(5)
-        try:
-            if page.is_closed():
-                raise RuntimeError('Browser fechado antes de concluir o login.')
-            url = page.url
-            print(f'  [{i*5}s] {url}')
-            if 'index.html' in url:
-                print('  Login OK!'); break
-            if 'multifactor-authentication' in url and not mfa_msg_shown:
-                mfa_msg_shown = True
-                print('  MFA detectado — complete a verificacao no browser e aguarde.')
-        except RuntimeError:
-            raise
-        except: pass
-        i += 1
+    if 'multifactor-authentication' in page.url:
+        print('  MFA detectado — complete a verificacao no browser e aguarde.')
 
+    # Aguarda navegação para qualquer URL fora do domínio login.sienge.com.br
+    try:
+        page.wait_for_url(
+            lambda url: (
+                'escolengenharia.sienge.com.br' in url and
+                'login.sienge.com.br' not in url
+            ),
+            timeout=600000,
+        )
+    except Exception as e:
+        print(f'  wait_for_url falhou: {e}')
+
+    print(f'  Login OK! ({page.url[:80]})')
     for _ in range(20):
         time.sleep(2)
         try:
             if 'Olá' in page.inner_text('body'): break
         except: pass
     time.sleep(2)
+    return page
 
 
 def navigate_to_form(page):
@@ -87,14 +85,31 @@ def navigate_to_form(page):
     page.click('text=Relatórios', timeout=10000)
     time.sleep(2)
     page.click('text=Contas pagas', timeout=10000)
-    time.sleep(4)
 
-    frame = page.frame(name='iFramePage')
-    if not frame:
-        frame = page.frame(url='*filterContaPagas*')
+    print('  Aguardando iframe do formulário (até 30s)...')
+    frame = None
+    for _ in range(60):
+        frame = page.frame(name='iFramePage')
+        if not frame:
+            frame = page.frame(url='*filterContaPagas*')
+        if not frame:
+            for f in page.frames:
+                if f.is_detached():
+                    continue
+                try:
+                    u = f.url or ''
+                    if any(k in u for k in ('ContaPagas', 'filterContaPagas', 'CPG')):
+                        frame = f
+                        break
+                except Exception:
+                    pass
+        if frame:
+            break
+        time.sleep(0.5)
+
     if not frame:
         raise RuntimeError('Iframe do formulário não encontrado')
-    print('  Iframe localizado.')
+    print(f'  Iframe localizado: {frame.url[:80]}')
     return frame
 
 
@@ -352,7 +367,7 @@ def main():
                                   accept_downloads=True)
         page = ctx.new_page()
 
-        login_sienge(page, login, senha)
+        page = login_sienge(page, login, senha)
         frame = navigate_to_form(page)
         fill_form(ctx, frame, page)
 

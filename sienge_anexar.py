@@ -116,27 +116,22 @@ def login_sienge(page, login, senha):
             pass
 
     print('[2] Aguardando login/MFA (complete no browser se solicitado)...')
-    mfa_msg_shown = False
-    i = 0
-    while True:
-        time.sleep(5)
-        try:
-            if page.is_closed():
-                raise RuntimeError('Browser fechado antes de concluir o login.')
-            url = page.url
-            print(f'  [{i * 5}s] {url}')
-            if 'index.html' in url:
-                print('  Login OK!')
-                break
-            if 'multifactor-authentication' in url and not mfa_msg_shown:
-                mfa_msg_shown = True
-                print('  MFA detectado — complete a verificacao no browser e aguarde.')
-        except RuntimeError:
-            raise
-        except Exception:
-            pass
-        i += 1
+    if 'multifactor-authentication' in page.url:
+        print('  MFA detectado — complete a verificacao no browser e aguarde.')
 
+    # Aguarda navegação para qualquer URL fora do domínio login.sienge.com.br
+    try:
+        page.wait_for_url(
+            lambda url: (
+                'escolengenharia.sienge.com.br' in url and
+                'login.sienge.com.br' not in url
+            ),
+            timeout=600000,
+        )
+    except Exception as e:
+        print(f'  wait_for_url falhou: {e}')
+
+    print(f'  Login OK! ({page.url[:80]})')
     for _ in range(20):
         time.sleep(2)
         try:
@@ -145,6 +140,7 @@ def login_sienge(page, login, senha):
         except Exception:
             pass
     time.sleep(2)
+    return page
 
 
 # ---------------------------------------------------------------------------
@@ -185,7 +181,7 @@ def _fill_titulo_field(frame, lancamento):
             input_id = label.get_attribute('for')
             if input_id:
                 frame.fill(f'#{input_id}', lancamento)
-                print(f'  Campo Título preenchido via label→#{input_id}')
+                print(f'  Campo Título preenchido via label->#{input_id}')
                 return True
     except Exception:
         pass
@@ -558,7 +554,7 @@ def main():
         ctx = browser.new_context(viewport={'width': 1600, 'height': 900})
         page = ctx.new_page()
 
-        login_sienge(page, login, senha)
+        page = login_sienge(page, login, senha)
         frame = navigate_to_titulos(page)
 
         ok = 0
@@ -567,7 +563,7 @@ def main():
         for pair in pairs:
             lancamento = pair['lancamento']
             comprovante = pair['comprovante']
-            print(f'\n[>>>] {comprovante}  →  lançamento {lancamento}')
+            print(f'\n[>>>] {comprovante}  ->  lançamento {lancamento}')
 
             frame = search_lancamento(page, frame, lancamento)
             if frame is None:
