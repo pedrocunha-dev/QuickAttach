@@ -4,20 +4,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Git & GitHub workflow
 
-The canonical remote is `origin` (GitHub). After every meaningful change — bug fix, new feature, refactor — commit and push to `origin main`:
+The canonical remote is `origin` (GitHub). Branch is `master`. After every meaningful change:
 
 ```bash
 git add <changed files>
 git commit -m "concise description"
-git push origin main
+git push origin master
 ```
 
-Never commit `sienge_credentials.json` (it is in `.gitignore`).  
-Never force-push to `main` without explicit user confirmation.
+`sienge_credentials.json` is in `.gitignore` and must never be committed.
 
 ## Installation & setup
-
-First-time setup on any machine — run the appropriate script from the project folder:
 
 ```bash
 # Linux
@@ -27,9 +24,9 @@ bash instalar.sh
 instalar.bat
 ```
 
-Both scripts: install pip dependencies, download Playwright Chromium, and create a desktop shortcut.
+Both scripts install pip dependencies, download Playwright Chromium, and create a desktop shortcut.
 
-To install manually:
+Manual install:
 ```bash
 pip3 install pymupdf playwright requests pdfplumber
 python3 -m playwright install chromium
@@ -43,21 +40,23 @@ python3 app.py        # Linux
 pythonw app.py        # Windows (no console window)
 
 # Run individual pipeline stages via CLI
-python3 split_comprovantes.py --pix PATH --bol PATH --data-lote DDMMAAAA --data-pasta AAAAMMDD
-python3 sienge_relatorio.py   --data-inicio DD/MM/AAAA --data-fim DD/MM/AAAA --empresa CD --data-pasta AAAAMMDD
+python3 split_comprovantes.py  --pix PATH --bol PATH --data-lote DDMMAAAA --data-pasta AAAAMMDD
+python3 sienge_relatorio.py    --data-inicio DD/MM/AAAA --data-fim DD/MM/AAAA --empresa CD --data-pasta AAAAMMDD
 python3 extrair_lancamentos.py --data-lote DDMMAAAA --data-pasta AAAAMMDD
 python3 sienge_anexar.py       --data-lote DDMMAAAA --data-pasta AAAAMMDD
 ```
 
-All scripts fall back to hardcoded defaults when run without arguments (last processed batch: `20042026` / `20260420`).
+All scripts fall back to hardcoded defaults when run without arguments.
+
+When running scripts directly on Windows (not via app.py), launch with `python -u` and redirect output to a log file to avoid buffering. The app.py subprocess launcher already sets `PYTHONUTF8=1` and `PYTHONIOENCODING=utf-8`.
 
 ---
 
 ## Purpose
 
-Automates the processing of batch payment receipts (comprovantes de pagamento) exported from Santander Internet Banking Empresarial for **Condomínio Fechado Solar Sinatra**:
+Automates processing of batch payment receipts (*comprovantes de pagamento*) exported from Santander Internet Banking Empresarial for **Condomínio Fechado Solar Sinatra**:
 
-1. Split multi-page PDFs (PIX + BOL) into individual receipt files with standardized names
+1. Split multi-page PIX + BOL PDFs into individual files with standardized names
 2. Log into SIENGE, generate the "Contas Pagas" report PDF
 3. Match each receipt to its SIENGE lançamento → JSON file
 4. Navigate to each lançamento in SIENGE, open the Anexos tab, and upload the matching receipt
@@ -67,44 +66,33 @@ Automates the processing of batch payment receipts (comprovantes de pagamento) e
 ## Folder structure (per batch)
 
 Date formats used across the project:
-- **DDMMAAAA** — used in filenames (e.g. `20042026`)
-- **AAAAMMDD** — used in folder names (e.g. `20260420`)
+- **DDMMAAAA** — used in filenames (e.g. `14042026`)
+- **AAAAMMDD** — used in folder names (e.g. `20260414`)
 
 ```
-COMPROVANTES/
-└── COMPROVANTES_{AAAAMMDD}/          ← source PDFs from Santander
-    ├── COMPROVANTE {DDMMAAAA} PIX.pdf
-    └── COMPROVANTE {DDMMAAAA} BOL.pdf
-
-COMPROVANTES_SEPARADOS/
-└── COMPROVANTES_SEP_{AAAAMMDD}/      ← one PDF per comprovante
-    └── COMPROVANTE-{DDMMAAAA}-{VALOR}-{NOME}.pdf
-
-RELATORIO_CONTAS_PAGAS/
-└── RELATORIO_CONTAS_{AAAAMMDD}/      ← SIENGE report + matching JSON
-    ├── RELATORIO_CONTAS_PAGAS_{DDMMAAAA}.pdf
-    └── LANCAMENTOS_MATCHED_{DDMMAAAA}.json
+~/QuickAttach/                            <- BASE_DIR (user data)
+├── COMPROVANTES/
+│   └── COMPROVANTES_{AAAAMMDD}/         <- source PDFs from Santander
+├── COMPROVANTES_SEPARADOS/
+│   └── COMPROVANTES_SEP_{AAAAMMDD}/     <- one PDF per comprovante
+└── RELATORIO_CONTAS_PAGAS/
+    └── RELATORIO_CONTAS_{AAAAMMDD}/     <- SIENGE report + matching JSON
+        ├── RELATORIO_CONTAS_PAGAS_{DDMMAAAA}.pdf
+        └── LANCAMENTOS_MATCHED_{DDMMAAAA}.json
 ```
+
+`SCRIPTS_DIR` (`Path(__file__).parent`) and `BASE_DIR` (`Path.home() / 'QuickAttach'`) are separate constants. When the repo is cloned directly to `~/QuickAttach/`, they point to the same directory.
 
 ---
 
 ## app.py — Interface gráfica
 
-**Framework:** tkinter (built-in)  
-Invoca os scripts como subprocessos (`subprocess.Popen`), captura stdout/stderr linha a linha via `queue.Queue` + `root.after(100)` e exibe no log.
+**Framework:** tkinter (built-in). Invokes scripts as subprocesses (`subprocess.Popen`), captures stdout/stderr line-by-line via `queue.Queue` + `root.after(100)`, displays in log widget.
 
-**Duas constantes de caminho:**
-- `SCRIPTS_DIR = Path(__file__).parent` — pasta dos `.py`; usado como `cwd` nos subprocessos e para localizar os scripts
-- `BASE_DIR = Path.home() / 'QuickAttach'` — pasta de dados do utilizador; criada automaticamente por `ensure_dirs()` na abertura
-
-**`ensure_dirs()`** cria `~/QuickAttach/` e as subpastas `COMPROVANTES/`, `COMPROVANTES_SEPARADOS/`, `RELATORIO_CONTAS_PAGAS/` com `exist_ok=True`. Chamada antes de `build_ui()`.
-
-**Campos de configuração:** Data do lote (DD/MM/AAAA) e Empresa (código). A data é auto-preenchida ao selecionar um PDF pelo nome do arquivo.
-
-**Três ações com máquina de estados (0→1→2→0):**
-1. **Subir Comprovantes** (estado 0) — seleciona PDFs PIX/BOL → `split_comprovantes.py`; ao concluir, habilita só "Emitir Relatório"
-2. **Emitir Relatório** (estado 1) — `sienge_relatorio.py` + `extrair_lancamentos.py` em sequência; ao concluir, habilita só "Anexar Comprovantes"
-3. **Anexar Comprovantes ao SIENGE** (estado 2) — `sienge_anexar.py`; ao concluir, volta ao estado 0
+**Three-step state machine (0→1→2→0):**
+1. **Subir Comprovantes** (state 0) → `split_comprovantes.py`; on success enables only "Emitir Relatório"
+2. **Emitir Relatório** (state 1) → `sienge_relatorio.py` + `extrair_lancamentos.py` in sequence; on success enables only "Anexar Comprovantes"
+3. **Anexar Comprovantes ao SIENGE** (state 2) → `sienge_anexar.py`; on success resets to state 0
 
 ---
 
@@ -112,40 +100,28 @@ Invoca os scripts como subprocessos (`subprocess.Popen`), captura stdout/stderr 
 
 **Script:** `split_comprovantes.py`
 
-Reads source PDFs, splits each page, saves to `COMPROVANTES_SEPARADOS/COMPROVANTES_SEP_{DATA_PASTA}/`.
+File naming convention: `COMPROVANTE-{DDMMAAAA}-{VALOR}-{NOME_FANTASIA}.pdf`
+- Value: `1608,85` — no `R$`, no thousands separator, comma as decimal
+- Name: uppercase, spaces → underscores, accents removed
+- Duplicates: `_1DE2`, `_2DE2` suffix when multiple pages share (valor, nome)
 
-### File naming convention
-
-`COMPROVANTE-{DDMMAAAA}-{VALOR}-{NOME_FANTASIA}.pdf`
-
-- **Value**: `1608,85` — no `R$`, no thousands separator, comma as decimal
-- **Name**: uppercase, spaces → underscores, accents removed
-- **Duplicates**: `_1DE2`, `_2DE2` suffix when multiple pages share the same (valor, nome)
-
-### Parsing logic by type
-
-**PIX**: value after `Valor\nR$ `; name between `Para\n` and `\nChave\n`
-
-**BOL** (Santander "2ª via de Comprovante"):
-- Value after `Valor total pago:\nR$\xa0`
-- Name: **last** `Nome Fantasia:` before `Dados do Pagador` (prefers Sacador Avalista when present); fallback to first `Razão Social:`
+Parsing by type:
+- **PIX**: value after `Valor\nR$ `; name between `Para\n` and `\nChave\n`
+- **BOL**: value after `Valor total pago:\nR$\xa0`; name from last `Nome Fantasia:` before `Dados do Pagador` (prefers Sacador Avalista); fallback to first `Razão Social:`
 
 ---
 
 ## Etapa 2: Relatório SIENGE
 
-**Script:** `sienge_relatorio.py`  
-**Credentials:** `sienge_credentials.json` (`login`, `senha`)
+**Script:** `sienge_relatorio.py` | **Credentials:** `sienge_credentials.json` (`login`, `senha`)
 
-Saves PDF to `RELATORIO_CONTAS_PAGAS/RELATORIO_CONTAS_{DATA_PASTA}/RELATORIO_CONTAS_PAGAS_{date_str}.pdf`.
-
-### Key selectors (iframe `iFramePage`)
+### Key selectors (inside iframe `iFramePage`)
 
 | Campo | Seletor |
 |---|---|
 | Empresa (código) | `#entity\.empresa\.cdEmpresaView` + Tab |
 | Data início/fim | `entity.dtPagtoInicio` / `entity.dtPagtoFim` — JS masked input |
-| Ordenação | `#tpOrdenacao` — select value `R` |
+| Ordenação | `#tpOrdenacao` |
 | Processar parcelas | `#flTodasC` |
 | Lupa Tipo de Baixa | `#tipoBaixaCPG img[src*="botProcurar.png"]:first-of-type` |
 | Botão Visualizar | `input[value="Visualizar"]` → nova aba |
@@ -156,17 +132,12 @@ Saves PDF to `RELATORIO_CONTAS_PAGAS/RELATORIO_CONTAS_{DATA_PASTA}/RELATORIO_CON
 
 **Script:** `extrair_lancamentos.py`
 
-Reads `RELATORIO_CONTAS_PAGAS_{DATA_LOTE}.pdf` with `pdfplumber`, matches each comprovante by **valor líquido**.
-
-### Matching logic
-
-Primary key: `liquido` value. Disambiguation when multiple SIENGE entries share the same value:
+Primary match key: `liquido` value. Disambiguation when multiple SIENGE entries share the same value:
 - **Positional** — when `_XDE Y` suffix count equals SIENGE entry count, paired in report order
 - **Name similarity** — Jaccard token-overlap score between sanitized comprovante name and `credor`
-- **Attach to all** — when best and second-best name scores are equal
+- **Attach to all** — when best and second-best name scores are tied
 
-### JSON output format
-
+JSON output:
 ```json
 {
   "pairs": [{"comprovante": "COMPROVANTE-....pdf", "lancamento": "71416"}],
@@ -183,14 +154,13 @@ Primary key: `liquido` value. Disambiguation when multiple SIENGE entries share 
 
 **Script:** `sienge_anexar.py`
 
-Reads `LANCAMENTOS_MATCHED_{DATA_LOTE}.json` from `RELATORIO_CONTAS_PAGAS/RELATORIO_CONTAS_{DATA_PASTA}/`. For each pair:
+For each pair in `LANCAMENTOS_MATCHED_{DATA_LOTE}.json`:
+1. Navigate to Títulos SPA via direct URL
+2. Fill "Título" → CONSULTAR → Editar
+3. Wait for iFramePage of Cadastro de Títulos (content-based detection)
+4. Aba Anexos → ADICIONAR → upload in **last row** of grid → SALVAR
 
-1. Navega para a SPA de Títulos via URL direta
-2. Preenche "Título" → CONSULTAR → Editar
-3. Aguarda iFramePage do Cadastro de Títulos (detecção por conteúdo)
-4. Aba Anexos → ADICIONAR → upload na **última linha** do grid → SALVAR
-
-### Seletores confirmados
+### Confirmed selectors
 
 | Elemento | Seletor | Contexto |
 |---|---|---|
@@ -199,9 +169,9 @@ Reads `LANCAMENTOS_MATCHED_{DATA_LOTE}.json` from `RELATORIO_CONTAS_PAGAS/RELATO
 | Botão Editar | `button[aria-label="Editar"]` | SPA (`page`) |
 | Aba Anexos | `a:has-text("Anexos")` | iFramePage |
 | Botão ADICIONAR | `input[value="Adicionar"]` | iFramePage |
-| File input nova linha | `tr:has(input[type="file"])` → último → `input[type="file"]` | iFramePage |
-| Descrição nova linha | `tr:has(input[type="file"])` → último → `input[type="text"]:not([readonly])` | iFramePage |
-| Botão SALVAR | `#btSalvar` com `force=True` + `scrollIntoView` | iFramePage |
+| File input nova linha | `tr:has(input[type="file"])` → last → `input[type="file"]` | iFramePage |
+| Descrição nova linha | `tr:has(input[type="file"])` → last → `input[type="text"]:not([readonly])` | iFramePage |
+| Botão SALVAR | `#btSalvar` with `force=True` + `scrollIntoView` | iFramePage |
 
 ---
 
@@ -211,37 +181,77 @@ Reads `LANCAMENTOS_MATCHED_{DATA_LOTE}.json` from `RELATORIO_CONTAS_PAGAS/RELATO
 
 | Frame | Identificador | Uso |
 |---|---|---|
-| Página principal | `index.html` | sidebar SPA (React/MUI) |
+| Página principal | SPA React/MUI | sidebar, Consulta de Títulos |
 | Formulário clássico | `iframe[name="iFramePage"]` em `/sienge/CPG/...` | relatório, Cadastro de Títulos, Anexos |
 | Overlay de busca | URL contendo `spjGenericSearch.do` | resultados de lupas IS_request |
 
-**Detecção do iFramePage (SPA v9.x):** o frame aparece com `name=''` e `url=''` por até 20s. Usar polling por conteúdo dentro do loop:
+### Login e detecção pós-MFA
+
+After credentials are submitted, SIENGE may require MFA. The redirect back to the application **stays in the same Playwright page** (it does NOT open a new tab or context). The correct detection pattern:
 
 ```python
-for attempt in range(60):
-    for f in page.frames:
-        if f.is_detached():
-            continue
-        try:
-            body = f.inner_text('body')
-            if 'Cadastro' in body and 'Parcelas' in body:
-                return f
-        except Exception:
-            pass
+page.wait_for_url(
+    lambda url: (
+        'escolengenharia.sienge.com.br' in url and
+        'login.sienge.com.br' not in url
+    ),
+    timeout=600000,
+)
+```
+
+The post-login URL is `https://escolengenharia.sienge.com.br/sienge/index.jsp` (not `index.html`). Do NOT poll `page.url` in a loop or scan `page.context.pages` — the redirect happens in the original tab.
+
+`login_sienge()` returns `page` so the caller can do `page = login_sienge(page, login, senha)`.
+
+### Detecção do iFramePage
+
+The iframe for the Contas Pagas form loads asynchronously after menu navigation. Use a polling loop (up to 30s) checking multiple identifiers, not a fixed sleep:
+
+```python
+frame = None
+for _ in range(60):
+    frame = page.frame(name='iFramePage')
+    if not frame:
+        frame = page.frame(url='*filterContaPagas*')
+    if not frame:
+        for f in page.frames:
+            if f.is_detached(): continue
+            try:
+                u = f.url or ''
+                if any(k in u for k in ('ContaPagas', 'filterContaPagas', 'CPG')):
+                    frame = f; break
+            except Exception: pass
+    if frame: break
     time.sleep(0.5)
+```
+
+For the Cadastro de Títulos iframe (in `sienge_anexar.py`), detect by body content:
+```python
+body = f.inner_text('body')
+if 'Cadastro' in body and 'Parcelas' in body:
+    return f
 ```
 
 ### Masked inputs
 
-Campos de data e código rejeitam `fill()` e `type()`. Usar JS + native value setter + eventos `input`/`change`/`blur`.  
-Ler valor atual via `frame.evaluate('document.getElementById("id").value')` — nunca `get_attribute('value')`.
+Date and code fields reject `fill()` and `type()`. Use JS native value setter:
+```python
+frame.evaluate(f'''
+    var el = document.getElementById("{field_id}");
+    var setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+    setter.call(el, "{value}");
+    el.dispatchEvent(new Event('input', {{bubbles: true}}));
+    el.dispatchEvent(new Event('change', {{bubbles: true}}));
+    el.dispatchEvent(new Event('blur', {{bubbles: true}}));
+''')
+```
+Read current value via `frame.evaluate('document.getElementById("id").value')` — never `get_attribute('value')`.
 
 ### Padrão IS_request / lupas
 
-1. Clicar na lupa no frame do formulário
-2. Overlay carrega num **novo iframe** na página principal (não janela nova)
-3. Identificar frame pela URL (`spjGenericSearch.do`)
-4. Interagir com checkboxes → `input[value="Selecionar"]`
+1. Click lupa inside the form frame
+2. Overlay loads in a **new iframe** on the main page (not a new window) — identify by URL (`spjGenericSearch.do`)
+3. Interact with checkboxes → confirm with `input[value="Selecionar"]`
 
 ### Notificações push
 
@@ -254,12 +264,15 @@ for sel in ['button:has-text("NÃO, OBRIGADO")', 'button:has-text("Fechar")', '[
 
 ### Download de relatório PDF
 
-Após "Visualizar", nova aba abre `please_wait_frame.jsp?url=/sienge/viewReportSPW.do?...`. Capturar a URL via `response` listener e baixar com `requests` + cookies do contexto Playwright.
+After "Visualizar", a new tab opens `please_wait_frame.jsp?url=/sienge/viewReportSPW.do?...`. Capture the URL via a `response` event listener and download with `requests` + cookies from the Playwright context.
 
 ### Arquitetura híbrida SPA + JSP
 
-- **JSP (clássico):** `sienge_relatorio.py` — conteúdo em `iFramePage`, inputs com máscara, lupas IS_request
-- **SPA (React/MUI):** `sienge_anexar.py` — conteúdo direto na `page`, inputs MUI sem `placeholder`
+- **JSP (clássico):** `sienge_relatorio.py` — content in `iFramePage`, masked inputs, IS_request lookups
+- **SPA (React/MUI):** `sienge_anexar.py` — content directly in `page`, MUI inputs without `placeholder`
 
-`page.content()` retorna apenas o HTML externo — usar `frame.content()` para inspecionar iframes.  
-`page.screenshot()` renderiza o viewport completo incluindo iframes.
+`page.content()` returns only the outer HTML shell — use `frame.content()` to inspect iframes.
+
+### Windows encoding
+
+Avoid non-ASCII characters in `print()` statements. The Windows console uses cp1252 by default, which cannot encode characters like `→` (`→`). Use ASCII alternatives (e.g. `->`) in all user-facing output. The app.py subprocess launcher sets `PYTHONUTF8=1` and `PYTHONIOENCODING=utf-8`, but scripts run directly from the terminal do not have this guarantee.
