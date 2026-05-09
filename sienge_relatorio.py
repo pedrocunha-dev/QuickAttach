@@ -86,9 +86,10 @@ def navigate_to_form(page):
     time.sleep(2)
     page.click('text=Contas pagas', timeout=10000)
 
-    print('  Aguardando iframe do formulário (até 30s)...')
+    print('  Aguardando iframe do formulário (até 60s)...')
+    main_url = page.url
     frame = None
-    for _ in range(60):
+    for _ in range(120):
         frame = page.frame(name='iFramePage')
         if not frame:
             frame = page.frame(url='*filterContaPagas*')
@@ -98,7 +99,26 @@ def navigate_to_form(page):
                     continue
                 try:
                     u = f.url or ''
+                    # exclude the main SPA frame
+                    if u == main_url or u.startswith(main_url.split('#')[0] + '#'):
+                        continue
                     if any(k in u for k in ('ContaPagas', 'filterContaPagas', 'CPG')):
+                        frame = f
+                        break
+                except Exception:
+                    pass
+        # fallback: detect by presence of Contas Pagas form elements
+        if not frame:
+            for f in page.frames:
+                if f.is_detached():
+                    continue
+                try:
+                    u = f.url or ''
+                    if u == main_url or u.startswith(main_url.split('#')[0] + '#'):
+                        continue
+                    if (f.query_selector('[name="entity.dtPagtoInicio"]') or
+                            f.query_selector('#tipoBaixaCPG') or
+                            f.query_selector('[name="entity.empresa.cdEmpresaView"]')):
                         frame = f
                         break
                 except Exception:
@@ -108,6 +128,13 @@ def navigate_to_form(page):
         time.sleep(0.5)
 
     if not frame:
+        urls = []
+        for f in page.frames:
+            try:
+                urls.append(f.url)
+            except Exception:
+                pass
+        print(f'  Frames disponiveis: {urls}')
         raise RuntimeError('Iframe do formulário não encontrado')
     print(f'  Iframe localizado: {frame.url[:80]}')
     return frame
