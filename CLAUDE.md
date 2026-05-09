@@ -4,13 +4,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Git & GitHub workflow
 
-The canonical remote is `origin` (GitHub). Branch is `master`. After every meaningful change:
+The canonical remote is `origin` (GitHub). Branch is `master`.
+
+**IMPORTANT: After completing ANY code change — without waiting for the user to ask — always run:**
 
 ```bash
 git add <changed files>
 git commit -m "concise description"
 git push origin master
 ```
+
+Do this automatically at the end of every task. Never leave changes uncommitted or unpushed.
 
 `sienge_credentials.json` is in `.gitignore` and must never be committed.
 
