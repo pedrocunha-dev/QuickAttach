@@ -273,7 +273,7 @@ def build_ui() -> tk.Tk:
     hdr.pack(fill='x')
     ttk.Label(hdr, text='QuickAttach', font=('Helvetica', 17, 'bold'),
               foreground='#2c3e50').pack(side='left')
-    ttk.Label(hdr, text='— Condomínio Fechado Solar Sinatra',
+    ttk.Label(hdr, text='— Anexação automática de comprovantes no SIENGE',
               font=('Helvetica', 11), foreground='#7f8c8d').pack(side='left', padx=8)
     ttk.Separator(root, orient='horizontal').pack(fill='x', padx=12)
 
