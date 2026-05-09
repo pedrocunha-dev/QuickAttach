@@ -3,3 +3,14 @@ __pycache__/
 *.pyc
 *.pyo
 .env
+
+# Dados do usuário — PDFs e relatórios com informação financeira
+COMPROVANTES/
+COMPROVANTES_SEPARADOS/
+RELATORIO_CONTAS_PAGAS/
+
+# Logs gerados em execução
+*.txt
+
+# Configurações locais do Claude Code
+.claude/

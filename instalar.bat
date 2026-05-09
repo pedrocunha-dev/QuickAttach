@@ -22,7 +22,7 @@ for /f "tokens=*" %%i in ('python --version 2^>^&1') do echo Python: %%i
 echo.
 
 :: ── 0. Copiar scripts para pasta permanente ───────────────────────────────────
-echo [0/4] Copiando arquivos para %INSTALL_DIR%...
+echo [1/4] Copiando arquivos para %INSTALL_DIR%...
 if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%"
 for %%f in (
     app.py
@@ -30,6 +30,7 @@ for %%f in (
     sienge_relatorio.py
     extrair_lancamentos.py
     sienge_anexar.py
+    quickattach.ico
 ) do (
     if exist "%SCRIPT_DIR%%%f" (
         copy /Y "%SCRIPT_DIR%%%f" "%INSTALL_DIR%\%%f" >nul
@@ -47,21 +48,21 @@ echo       OK
 echo.
 
 :: ── 1. Dependencias Python ───────────────────────────────────────────────────
-echo [1/4] Instalando dependencias Python...
+echo [2/4] Instalando dependencias Python...
 python -m pip install --quiet --upgrade pymupdf playwright requests pdfplumber
 if errorlevel 1 goto :erro
 echo       OK
 echo.
 
 :: ── 2. Playwright Chromium ───────────────────────────────────────────────────
-echo [2/4] Instalando Chromium (Playwright)...
+echo [3/4] Instalando Chromium (Playwright)...
 python -m playwright install chromium
 if errorlevel 1 goto :erro
 echo       OK
 echo.
 
 :: ── 3. Atalho no Desktop ─────────────────────────────────────────────────────
-echo [3/4] Criando atalho de desktop...
+echo [4/4] Criando atalho de desktop...
 
 for /f "tokens=*" %%i in ('where python 2^>nul') do (
     set "PYTHON_EXE=%%i"
@@ -81,6 +82,7 @@ set "PS1=%TEMP%\qa_install.ps1"
     echo $s.Arguments = '"%APP_PY%"'
     echo $s.WorkingDirectory = '%INSTALL_DIR%'
     echo $s.Description = 'QuickAttach - Anexo de comprovantes no SIENGE'
+    echo $s.IconLocation = '%INSTALL_DIR%\quickattach.ico'
     echo $s.Save(^)
 ) > "%PS1%"
 powershell -NoProfile -ExecutionPolicy Bypass -File "%PS1%"

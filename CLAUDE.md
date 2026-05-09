@@ -24,12 +24,17 @@ bash instalar.sh
 instalar.bat
 ```
 
-Both scripts install pip dependencies, download Playwright Chromium, and create a desktop shortcut.
+Both scripts install pip dependencies, download Playwright Chromium, and create a desktop shortcut with the `quickattach.ico` icon. The `.ico` file must be present in the project root — it is copied to `%USERPROFILE%\QuickAttach\` during installation.
 
 Manual install:
 ```bash
 pip3 install pymupdf playwright requests pdfplumber
 python3 -m playwright install chromium
+```
+
+**Credentials file** — create `sienge_credentials.json` in the project folder (preserved across reinstalls):
+```json
+{ "login": "your_username", "senha": "your_password" }
 ```
 
 ## Running
@@ -46,7 +51,7 @@ python3 extrair_lancamentos.py --data-lote DDMMAAAA --data-pasta AAAAMMDD
 python3 sienge_anexar.py       --data-lote DDMMAAAA --data-pasta AAAAMMDD
 ```
 
-All scripts fall back to hardcoded defaults when run without arguments.
+All scripts fall back to hardcoded defaults (`20042026` / `20260420`) when run without arguments.
 
 When running scripts directly on Windows (not via app.py), launch with `python -u` and redirect output to a log file to avoid buffering. The app.py subprocess launcher already sets `PYTHONUTF8=1` and `PYTHONIOENCODING=utf-8`.
 
@@ -73,6 +78,8 @@ Date formats used across the project:
 ~/QuickAttach/                            <- BASE_DIR (user data)
 ├── COMPROVANTES/
 │   └── COMPROVANTES_{AAAAMMDD}/         <- source PDFs from Santander
+│       ├── COMPROVANTE {DDMMAAAA} PIX.pdf
+│       └── COMPROVANTE {DDMMAAAA} BOL.pdf
 ├── COMPROVANTES_SEPARADOS/
 │   └── COMPROVANTES_SEP_{AAAAMMDD}/     <- one PDF per comprovante
 └── RELATORIO_CONTAS_PAGAS/
@@ -94,11 +101,13 @@ Date formats used across the project:
 2. **Emitir Relatório** (state 1) → `sienge_relatorio.py` + `extrair_lancamentos.py` in sequence; on success enables only "Anexar Comprovantes"
 3. **Anexar Comprovantes ao SIENGE** (state 2) → `sienge_anexar.py`; on success resets to state 0
 
+The batch date field defaults to today's date (`date.today()`) and is overwritten automatically when the user selects a PDF whose filename contains an 8-digit date (DDMMAAAA).
+
 ---
 
 ## Etapa 1: Divisão e renomeação de comprovantes
 
-**Script:** `split_comprovantes.py`
+**Script:** `split_comprovantes.py` | **PDF library:** PyMuPDF (text extraction + page splitting)
 
 File naming convention: `COMPROVANTE-{DDMMAAAA}-{VALOR}-{NOME_FANTASIA}.pdf`
 - Value: `1608,85` — no `R$`, no thousands separator, comma as decimal
@@ -126,11 +135,13 @@ Parsing by type:
 | Lupa Tipo de Baixa | `#tipoBaixaCPG img[src*="botProcurar.png"]:first-of-type` |
 | Botão Visualizar | `input[value="Visualizar"]` → nova aba |
 
+`select_tipo_baixa()` clicks the Tipo de Baixa lupa, waits for the `spjGenericSearch.do` overlay iframe, and selects **both** "Baixa" and "Antecipação" checkboxes before confirming. Both types must be selected to capture all paid entries.
+
 ---
 
 ## Etapa 3: Extração e matching de lançamentos
 
-**Script:** `extrair_lancamentos.py`
+**Script:** `extrair_lancamentos.py` | **PDF library:** pdfplumber (structured table extraction from SIENGE report)
 
 Primary match key: `liquido` value. Disambiguation when multiple SIENGE entries share the same value:
 - **Positional** — when `_XDE Y` suffix count equals SIENGE entry count, paired in report order
@@ -159,6 +170,8 @@ For each pair in `LANCAMENTOS_MATCHED_{DATA_LOTE}.json`:
 2. Fill "Título" → CONSULTAR → Editar
 3. Wait for iFramePage of Cadastro de Títulos (content-based detection)
 4. Aba Anexos → ADICIONAR → upload in **last row** of grid → SALVAR
+
+**Idempotency:** `_already_attached()` checks whether a file with the same name is already present in the Anexos grid before uploading. Re-running `sienge_anexar.py` on a partially completed batch is safe — already-attached files are skipped.
 
 ### Confirmed selectors
 
@@ -275,4 +288,4 @@ After "Visualizar", a new tab opens `please_wait_frame.jsp?url=/sienge/viewRepor
 
 ### Windows encoding
 
-Avoid non-ASCII characters in `print()` statements. The Windows console uses cp1252 by default, which cannot encode characters like `→` (`→`). Use ASCII alternatives (e.g. `->`) in all user-facing output. The app.py subprocess launcher sets `PYTHONUTF8=1` and `PYTHONIOENCODING=utf-8`, but scripts run directly from the terminal do not have this guarantee.
+Avoid non-ASCII characters in `print()` statements. The Windows console uses cp1252 by default, which cannot encode characters like `→`. Use ASCII alternatives (e.g. `->`) in all user-facing output. The app.py subprocess launcher sets `PYTHONUTF8=1` and `PYTHONIOENCODING=utf-8`, but scripts run directly from the terminal do not have this guarantee.

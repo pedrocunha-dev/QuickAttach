@@ -8,6 +8,7 @@ import subprocess
 import sys
 import threading
 import tkinter as tk
+from datetime import date
 from pathlib import Path
 from tkinter import filedialog, messagebox, scrolledtext, ttk
 
@@ -282,7 +283,7 @@ def build_ui() -> tk.Tk:
 
     ttk.Label(cfg, text='Data do lote (DD/MM/AAAA):').grid(row=0, column=0, sticky='w', padx=4)
     date_entry = ttk.Entry(cfg, width=14, font=('Helvetica', 10))
-    date_entry.insert(0, '20/04/2026')
+    date_entry.insert(0, date.today().strftime('%d/%m/%Y'))
     date_entry.grid(row=0, column=1, padx=4)
 
     ttk.Label(cfg, text='Empresa (código):').grid(row=0, column=2, sticky='w', padx=(20, 4))
